@@ -43,8 +43,10 @@ class MyproxyDownloadMiddleware(object):
         return None
 
     def getrandomproxy(self):
-        index = random.randint(0,100) % 30
+        
         res = self.dbutils.findProxypool(30)
+        index = random.randint(0,100) % len(res)
+        
         print("使用代理：" , res, index)
         return res[index].get('purl')
 
