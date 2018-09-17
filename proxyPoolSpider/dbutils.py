@@ -52,8 +52,9 @@ class DbUtils(object):
 		detail.insert_one({'url':url, 'kinddesc':kinddesc , 'total':total, 'addcount':addcount, 'existcount':existcount, 'timestamp':timestamp})
 
 	## 从proxypoolnow表中取最新的num个代理，以列表的形式返回 
-	def findProxypool(self, num):
-		res = self.tablenow.find().sort('tm',pymongo.DESCENDING).limit(num)
+	## 目前只过滤国内高匿 ‘A'
+	def findProxypool(self, num, f={'anonymous': 'A'}):
+		res = self.tablenow.find(f).sort('tm',pymongo.DESCENDING).limit(num)
 		#return self.tablenow.find(sort=('tm',pymongo.DESCENDING), limit=30)
 		reslist = []
 		for r in res:
