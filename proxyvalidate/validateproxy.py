@@ -8,7 +8,9 @@ import urllib3
 MONGO_URL = 'mongodb://10.30.16.206:27017'
 MONGO_DB = 'proxydb'
 MONGO_USER = 'proxy'
-MONGO_PWD = 'proxy123'
+MONGO_PWD = 'proxy123' 
+
+TIMEOUT = 4.0
 
 '''
     通过多进程进行代理ip地址的验证； 
@@ -31,15 +33,17 @@ class Dispatcher(object):
         self.tabledel = self.db['proxyhistory']
         self.validate = ValidateProcess()
 
-    ## 排序status ， 不处r.理透明的ip代理 {'anonymous':'A'}
+    ## 排序status ， 不处理透明的ip代理 ，只处理匿名的 {'anonymous':'A'} 
+    ## 增加 对国外ip的单独处理  
     def findstatus(self):
-        res = self.table.find({'anonymous': 'A'}).distinct('status')
+        res = self.table.find({'$or' : [{'anonymous': 'A'}, {'anonymous': {'$regex' : '^W'}}]}).distinct('status')
         res.sort()
         res.reverse()
         print("当前的status ：" , res)
         return res
 
-    # 5. 在callback中，对无法满足的响应时间的进行删除处理
+    # 5. 在callback中，对无法满足的响应时间的进行删除处理 
+    # 增加对国外的处理  
     def done_callback(self, resfuture):
         try:
             res = resfuture.result()
@@ -55,7 +59,7 @@ class Dispatcher(object):
             else:
                 print("INSERT ")
                 # 无则新插入， 有则更新 
-                self.tablenow.replace_one({'url': res.get("purl")}, {'url': res.get("purl"), 'tm': datetime.datetime.now() } , upsert=True)
+                self.tablenow.replace_one({'url': res.get("purl")}, {'url': res.get("purl"), 'tm': datetime.datetime.now(), 'anonymous': res.get('record').get('anonymous') } , upsert=True)
         except Exception as e:
             print("Error in futrue callback:", e)
         
@@ -68,8 +72,8 @@ class Dispatcher(object):
             for s in statuss:
                 # 3. 对status进行 +1 update  
                 # Pm. 当status的+1 操作到最大值时会怎么样  
-                self.table.update_many({'status':s , 'anonymous': 'A'}, {'$inc': {'status': 1}}) 
-                rlist = self.table.find(filter={'status': s+1, 'anonymous': 'A'}, projection=['ip', 'port', 'anonymous', 'status', 'http', 'kinddesc'])
+                self.table.update_many({'$and' : [{'status':s }, {'$or' : [{'anonymous': 'A'}, {'anonymous': {'$regex' : '^W'}}]}]}, {'$inc': {'status': 1}}) 
+                rlist = self.table.find(filter={'$and' : [{'status':s+1 }, {'$or' : [{'anonymous': 'A'}, {'anonymous': {'$regex' : '^W'}}]}]}, projection=['ip', 'port', 'anonymous', 'status', 'http', 'kinddesc'])
                 print('待发送列表长度：' , rlist.count())
 
                 for p in rlist:
@@ -102,9 +106,15 @@ class ValidateProcess(object):
             'Accept-Language': 'zh-CN,zh;q=0.9'
         }
 
+        # 增加国外的判断  
+        anonymous = proxy.get('anonymous')
+
         ulib = urllib3.ProxyManager(proxy_url=purl, num_pools=1, headers=header)
         try:
-            ulib.request('GET', "http://www.baidu.com", timeout=5.0 )
+            if anonymous == 'A':
+                ulib.request('GET', "http://www.baidu.com", timeout=TIMEOUT ) 
+            else:
+                ulib.request('GET', "https://www.google.com", timeout=TIMEOUT ) 
         except urllib3.exceptions.HTTPError :
             print("Not avaliable proxy ", purl)
             # delete item 
@@ -112,92 +122,6 @@ class ValidateProcess(object):
         
         print("可用proxy：", purl)
         return {'result': 1 , 'purl':purl, 'record': proxy}
-
-
-
-"""
-class CrawlProcess(object):
-    '''
-    配合进程池进行URL链接爬取及结果解析；
-    最终通过crawl方法的complete_callback参数进行爬取解析结果回调
-    '''
-    def _request_parse_runnable(self, ip, port):
-        print('start get web content from: ' + url)
-        try:
-            headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"}
-            req = request.Request("http://www.baidu.com", headers=headers)
-            content = request.urlopen(req).read().decode("utf-8")
-            soup = BeautifulSoup(content, "html.parser", from_encoding='utf-8')
-            new_urls = set()
-            links = soup.find_all("a", href=re.compile(r"/item/\w+"))
-            for link in links:
-                new_urls.add(urljoin(url, link["href"]))
-            data = {"url": url, "new_urls": new_urls}
-            data["title"] = soup.find("dd", class_="lemmaWgt-lemmaTitle-title").find("h1").get_text()
-            data["summary"] = soup.find("div", class_="lemma-summary").get_text()
-        except BaseException as e:
-            print(str(e))
-            data = None
-        return data
-
-    def crawl(self, url, complete_callback, process_pool):
-        future = process_pool.submit(self._request_parse_runnable, url)
-        future.add_done_callback(complete_callback)
-
-
-class OutPutProcess(object):
-    '''
-    配合进程池对上面爬取解析进程结果进行进程池处理存储；
-    '''
-    def _output_runnable(self, crawl_result):
-        try:
-            url = crawl_result['url']
-            title = crawl_result['title']
-            summary = crawl_result['summary']
-            save_dir = 'output'
-            print('start save %s as %s.txt.' % (url, title))
-            if os.path.exists(save_dir) is False:
-                os.makedirs(save_dir)
-            save_file = save_dir + os.path.sep + title + '.txt'
-            if os.path.exists(save_file):
-                print('file %s is already exist!' % title)
-                return None
-            with open(save_file, "w") as file_input:
-                file_input.write(summary)
-        except Exception as e:
-            print('save file error.'+str(e))
-        return crawl_result
-
-    def save(self, crawl_result, process_pool):
-        process_pool.submit(self._output_runnable, crawl_result)
-
-
-class CrawlManager(object):
-    '''
-    爬虫管理类，进程池负责统一管理调度爬取解析及存储进程
-    '''
-    def __init__(self):
-        self.crawl = CrawlProcess()
-        self.output = OutPutProcess()
-        self.crawl_pool = ProcessPoolExecutor(max_workers=8)
-        self.crawl_deep = 100   #爬取深度
-        self.crawl_cur_count = 0
-
-    def _crawl_future_callback(self, crawl_url_future):
-        try:
-            data = crawl_url_future.result()
-            self.output.save(data, self.crawl_pool)
-            for new_url in data['new_urls']:
-                self.start_runner(new_url)
-        except Exception as e:
-            print('Run crawl url future process error. '+str(e))
-
-    def start_runner(self, url):
-        if self.crawl_cur_count > self.crawl_deep:
-            return
-        self.crawl_cur_count += 1
-        self.crawl.crawl(url, self._crawl_future_callback, self.crawl_pool)
- """
 
 if __name__ == '__main__':
     d = Dispatcher()

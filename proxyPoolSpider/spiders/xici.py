@@ -8,9 +8,13 @@ import  random
 
 DESC = {'nn': '国内高匿', 'nt': '国内普通', 'wn': '国外高匿', 'wt': '国外普通'}
 
-PAGENUM = range(1, 10)
+PAGENUM = range(1, 4)
 
-
+'''
+    www.xicidaili.com 西刺免费代理抓取  
+    1. 抓取的代理若在库中已经存在，则不重复插入 
+    2. 后台需要单独启动脚本来进行验证 ，对验证不通过的进行删除操作， 通过的放到新库中
+'''
 class XiciSpider(scrapy.Spider):
     name = 'xici'
     allowed_domains = ['www.xicidaili.com']
