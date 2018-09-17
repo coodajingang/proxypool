@@ -51,6 +51,12 @@ class DbUtils(object):
 		detail = self.db['crawdetail']
 		detail.insert_one({'url':url, 'kinddesc':kinddesc , 'total':total, 'addcount':addcount, 'existcount':existcount, 'timestamp':timestamp})
 
+	## 从proxypoolnow表中取最新的num个代理，以列表的形式返回 
 	def findProxypool(self, num):
-		return self.tablenow.find().sort('tm',pymongo.DESCENDING).limit(num)
+		res = self.tablenow.find().sort('tm',pymongo.DESCENDING).limit(num)
 		#return self.tablenow.find(sort=('tm',pymongo.DESCENDING), limit=30)
+		reslist = []
+		for r in res:
+			reslist.append(r)
+
+		return reslist

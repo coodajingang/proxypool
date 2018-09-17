@@ -42,11 +42,10 @@ class MyproxyDownloadMiddleware(object):
         request.meta['proxy'] = self.getrandomproxy()
         return None
 
+    # 取前30个最近的验证过的代理 ， 随机中取一个使用  
     def getrandomproxy(self):
-        
         res = self.dbutils.findProxypool(30)
         index = random.randint(0,100) % len(res)
-        
         print("使用代理：" , res, index)
         return res[index].get('purl')
 
