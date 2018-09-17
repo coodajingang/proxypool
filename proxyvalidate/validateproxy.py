@@ -45,8 +45,11 @@ class Dispatcher(object):
             res = resfuture.result()
             #print(res)
             if (res.get('result') < 1) :
-                print("DELETE ", res.get('record').get('ip'), res.get('record').get('port'))
-                self.table.delete_one({'_id': res.get('record').get('_id')})
+                ip =  res.get('record').get('ip')
+                port = res.get('record').get('port')
+                print("DELETE ",ip , port )
+                # self.table.delete_one({'_id': res.get('record').get('_id')})
+                self.table.delete_many({'ip': ip, 'port': port})
                 self.tabledel.save(res.get('record'))
                 self.tablenow.delete_one({'url': res.get("purl")})
             else:
